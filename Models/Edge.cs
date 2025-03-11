@@ -1,40 +1,23 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization;
 
-public class Edge
+public class Edge : MapPoint
 {
-  public required string Name { get; set; }
-  public int Capacity { get; set; } = 2;
-  public required string Type { get; set; } // "carRoad" или "planeRoad"
+  [JsonPropertyName("node1")]
   public required string Node1 { get; set; }
+  [JsonPropertyName("node2")]
   public required string Node2 { get; set; }
-  public List<Vehicle> Vehicles { get; set; } = new();
-  public List<Reservation> Reserved { get; set; } = new();
-
+  public new List<VehicleOnEdge> Vehicles { get; set; } = new List<VehicleOnEdge>();
   public Edge() { }
 
   [SetsRequiredMembers]
-  public Edge(string name, string node1, string node2, string type = "carRoad")
+  public Edge(string name, string node1, string node2, string type = "carRoad", int capacity = 2)
   {
     Name = name;
     Node1 = node1;
     Node2 = node2;
     Type = type;
+    Capacity = capacity;
   }
-}
-
-public class Vehicle
-{
-  public required Guid Guid { get; set; }
-  public required string VehicleType { get; set; }
-  public required string From { get; set; }
-  public required string To { get; set; }
-  public required string Status { get; set; } // "moving" или "waiting"
-}
-
-public class Reservation
-{
-  public required Guid Guid { get; set; }
-  public required string From { get; set; }
-  public required string To { get; set; }
 }
 
