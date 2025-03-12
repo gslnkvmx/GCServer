@@ -1,14 +1,23 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
-public class Node : MapPoint
+public class Node : IMapPoint
 {
+  [JsonPropertyName("name")]
+  public string Name { get; set; }
+  [JsonPropertyName("capacity")]
+  public int Capacity { get; set; }
+  [JsonPropertyName("type")]
+  public string Type { get; set; }
+  [JsonPropertyName("vehicles")]
+  public List<IVehicle> Vehicles { get; set; } = new();
   [SetsRequiredMembers]
   public Node(string name, int capacity = 1)
   {
     Name = name;
     Type = SetNodeType(name);
     if (Type == "carGarage") capacity = 30;
+    if (Type == "refuelStation") capacity = 5;
     Capacity = capacity;
   }
 

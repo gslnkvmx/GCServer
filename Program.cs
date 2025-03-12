@@ -1,3 +1,5 @@
+using GCServer.Endpoints;
+
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<ControlService>();
 

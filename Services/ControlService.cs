@@ -2,7 +2,7 @@ public class ControlService
 {
   public List<Node> Nodes { get; } = new();
   public List<Edge> Edges { get; } = new();
-  public List<MapPoint> MapPoints { get; } = new();
+  public Dictionary<string, List<string[]>> NodesConnections { get; } = new();
   private readonly object _lock = new();
 
   public ControlService()
@@ -28,6 +28,12 @@ public class ControlService
           AddNodeIfNotExists(node1);
           AddNodeIfNotExists(node2);
           AddEdgeIfNotExists(edgeName, node1, node2);
+
+          if (!NodesConnections.ContainsKey(node1)) NodesConnections.Add(node1, new List<string[]>());
+          if (!NodesConnections.ContainsKey(node2)) NodesConnections.Add(node2, new List<string[]>());
+
+          NodesConnections[node1].Add([edgeName, node2]);
+          NodesConnections[node2].Add([edgeName, node1]);
         }
       }
     }
@@ -39,7 +45,6 @@ public class ControlService
     {
       var node = new Node(nodeName);
       Nodes.Add(node);
-      MapPoints.Add(node);
     }
   }
 
@@ -52,7 +57,6 @@ public class ControlService
       else if (edgeName.StartsWith("EP")) edge = new Edge(edgeName, node1, node2, "planeRoad", 2);
 
       Edges.Add(edge);
-      MapPoints.Add(edge);
     }
   }
 
@@ -60,19 +64,45 @@ public class ControlService
   {
     lock (_lock)
     {
-      var fromPoint = MapPoints.FirstOrDefault(e => e.Name == from);
-      var toPoint = MapPoints.FirstOrDefault(e => e.Name == to);
+      var moveToEdge = false;
+      IMapPoint? fromPoint = null;
+      IMapPoint? toPoint = null;
+      if (from.StartsWith("E"))
+      {
+        fromPoint = Edges.FirstOrDefault(e => e.Name == from);
+        toPoint = Nodes.FirstOrDefault(e => e.Name == to);
+      }
+      else
+      {
+        fromPoint = Nodes.FirstOrDefault(e => e.Name == from);
+        toPoint = Edges.FirstOrDefault(e => e.Name == to);
+        moveToEdge = true;
+      }
 
       if (fromPoint == null || toPoint == null) return false;
 
-      var vehicle = fromPoint.Vehicles.First(v => v.Guid == guid);
+      var vehicle = fromPoint.Vehicles.FirstOrDefault(v => v.Guid == guid);
 
       if (vehicle == null) return false;
 
-      if (toPoint.Vehicles.Count() >= toPoint.Capacity)
+      if (toPoint.Vehicles.FirstOrDefault(v => v.Guid == guid) != null) return true;
+
+      if (toPoint.Vehicles.Count(v => v.Status != "reserved") >= toPoint.Capacity)
         return false;
 
-      vehicle.Status = "reserved";
+      if (moveToEdge)
+      {
+        if (toPoint.Vehicles.Count == 1)
+        {
+          VehicleOnEdge vehicleOnEdge = (VehicleOnEdge)toPoint.Vehicles[0];
+          if (vehicleOnEdge.From == from) return false;
+        }
+
+        toPoint.Vehicles.Add(new VehicleOnEdge((Vehicle)vehicle, from, to, "reserved"));
+        return true;
+      }
+
+      toPoint.Vehicles.Add(new Vehicle((VehicleOnEdge)vehicle, "reserved"));
       return true;
     }
   }
@@ -81,9 +111,20 @@ public class ControlService
   {
     lock (_lock)
     {
-      var fromPoint = MapPoints.FirstOrDefault(e => e.Name == from);
+      IMapPoint? fromPoint = null;
+      IMapPoint? toPoint = null;
+      if (from.StartsWith("E"))
+      {
+        fromPoint = Edges.FirstOrDefault(e => e.Name == from);
+        toPoint = Nodes.FirstOrDefault(e => e.Name == to);
+      }
+      else
+      {
+        fromPoint = Nodes.FirstOrDefault(e => e.Name == from);
+        toPoint = Edges.FirstOrDefault(e => e.Name == to);
+      }
+
       if (fromPoint == null) return (false, $"Не существует такой точки: {from}");
-      var toPoint = MapPoints.FirstOrDefault(e => e.Name == to);
       if (toPoint == null) return (false, $"Не существует такой точки: {to}");
 
       // Проверка резервации
@@ -92,14 +133,13 @@ public class ControlService
       if (vehicle == null || vehicle.Status != "reserved")
         return (false, "Разрешение на движение отсутствует");
 
-      vehicle = fromPoint.Vehicles.FirstOrDefault(v => v.Guid == guid);
-
-      if (vehicle == null) return (false, "Техника не находится на указанной точке отправления");
+      if (fromPoint.Vehicles.FirstOrDefault(v => v.Guid == guid) == null) return (false, "Техника не находится на указанной точке отправления");
 
       vehicle.Status = "moving";
 
+      vehicle = fromPoint.Vehicles.FirstOrDefault(v => v.Guid == guid);
       // Освобождение предыдцщей позиции
-      fromPoint.Vehicles.Remove(vehicle);
+      fromPoint.Vehicles.Remove(vehicle!);
 
       // Отправка в визуализатор (заглушка)
       //_ = SendToVisualizer(new { guid, from, to });
@@ -112,9 +152,20 @@ public class ControlService
   {
     lock (_lock)
     {
-      var fromPoint = MapPoints.FirstOrDefault(e => e.Name == from);
+      IMapPoint? fromPoint = null;
+      IMapPoint? toPoint = null;
+      if (from.StartsWith("E"))
+      {
+        fromPoint = Edges.FirstOrDefault(e => e.Name == from);
+        toPoint = Nodes.FirstOrDefault(e => e.Name == to);
+      }
+      else
+      {
+        fromPoint = Nodes.FirstOrDefault(e => e.Name == from);
+        toPoint = Edges.FirstOrDefault(e => e.Name == to);
+      }
+
       if (fromPoint == null) return (false, $"Не существует такой точки: {from}");
-      var toPoint = MapPoints.FirstOrDefault(e => e.Name == to);
       if (toPoint == null) return (false, $"Не существует такой точки: {to}");
 
       // Проверка резервации
@@ -122,10 +173,6 @@ public class ControlService
 
       if (vehicle == null || vehicle.Status != "moving")
         return (false, "Разрешение на движение отсутствует");
-
-      vehicle = fromPoint.Vehicles.FirstOrDefault(v => v.Guid == guid);
-
-      if (vehicle == null) return (false, "Техника не находится на указанной точке отправления");
 
       vehicle.Status = "waiting";
 
@@ -166,15 +213,15 @@ public class ControlService
           return (false, $"Транспортное средство {guid} уже существует");
 
         node.Vehicles.Add(new Vehicle
-        {
-          Guid = guid,
-          VehicleType = node.Type switch
+        (
+          guid,
+          node.Type switch
           {
             "planeParking" or "runway" => "plane",
             _ => "car"
           },
-          Status = "waiting"
-        });
+          "waiting"
+        ));
 
         Console.WriteLine($"Инициализировано транспортное средство {guid} на узле {nodeName}");
       }
@@ -214,5 +261,41 @@ public class ControlService
     Console.WriteLine("=======================\n");
   }
 
-  // Другие методы: HandleArrival, Pathfinding и т.д.
+  public List<string> FindPath(string from, string to)
+  {
+    var queue = new Queue<List<string>>();
+    var visited = new HashSet<string>();
+
+    queue.Enqueue(new List<string> { from });
+    visited.Add(from);
+
+    while (queue.Count > 0)
+    {
+      var currentPath = queue.Dequeue();
+      var currentNode = currentPath.Last();
+
+      if (currentNode == to)
+        return currentPath;
+
+      if (NodesConnections.TryGetValue(currentNode, out var connections))
+      {
+        foreach (var connection in connections)
+        {
+          string edgeName = connection[0];
+          string neighborNode = connection[1];
+
+          if (!visited.Contains(neighborNode))
+          {
+            visited.Add(neighborNode);
+            // Добавляем ребро и следующую вершину в путь
+            var newPath = new List<string>(currentPath) { edgeName, neighborNode };
+            queue.Enqueue(newPath);
+          }
+        }
+      }
+    }
+
+    // Путь не найден
+    return new List<string>();
+  }
 }

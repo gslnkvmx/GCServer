@@ -1,23 +1,19 @@
 using System.Text.Json.Serialization;
 
-public class MapPoint
+public interface IMapPoint
 {
-  [JsonPropertyName("name")]
-  public required string Name { get; set; }
-  [JsonPropertyName("capacity")]
+  public string Name { get; set; }
   public int Capacity { get; set; }
-  [JsonPropertyName("type")]
-  public required string Type { get; set; }
-  [JsonPropertyName("vehicles")]
-  public List<Vehicle> Vehicles { get; set; } = new();
+  public string Type { get; set; }
+  public List<IVehicle> Vehicles { get; set; }
 
   public string GetChars()
   {
     return Name.Split('-')[0];
   }
 
-  public string GetNum()
+  public int GetFirstNum()
   {
-    return Name.Split('-')[1];
+    return Name.Split('-')[1][0] - '0';
   }
 }
