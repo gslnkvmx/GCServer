@@ -5,8 +5,20 @@ public class ControlService
   public Dictionary<string, List<string[]>> NodesConnections { get; } = new();
   private readonly object _lock = new();
 
-  public ControlService()
+  private readonly Dictionary<string, string> _vehicleTypeMap = new()
+    {
+        {"P", "plane"},
+        {"BUS", "bus"},
+        {"BG", "baggage_tractor"},
+        {"CT", "catering_truck"},
+        {"FM", "followme"},
+        {"RT", "fuel_truck"}
+    };
+  private readonly RabbitMqService _rabbitMqService;
+
+  public ControlService(RabbitMqService rabbitMqService)
   {
+    _rabbitMqService = rabbitMqService;
     InitializeMapFromFile("./configs/map.txt");
     PrintMapToConsole();
   }
@@ -141,8 +153,8 @@ public class ControlService
       // Освобождение предыдцщей позиции
       fromPoint.Vehicles.Remove(vehicle!);
 
-      // Отправка в визуализатор (заглушка)
-      //_ = SendToVisualizer(new { guid, from, to });
+      // Отправка в визуализатор
+      _ = SendToVisualizer(guid, from, to);
 
       return (true, null);
     }
@@ -180,10 +192,89 @@ public class ControlService
     }
   }
 
-  private async Task SendToVisualizer(object data)
+  public (object, bool) GetLandPermission(string guid, string runway)
   {
-    using var client = new HttpClient();
-    await client.PostAsJsonAsync("http://visualizer/renderMove", data);
+    lock (_lock)
+    {
+      var parking = Nodes
+          .FirstOrDefault(n => n.Type == "planeParking" && n.Vehicles.Count < n.Capacity)?
+          .Name;
+
+      if (parking == null)
+        return (new { allowed = false, error = "Нет свободных парковочных мест", retryAfter = 10000 }, false);
+
+      var runwayNode = Nodes.FirstOrDefault(n => n.Name == runway && n.Type == "runway");
+      if (runwayNode == null)
+        return (new { allowed = false, error = "ВПП не найдена", retryAfter = 3000 }, false);
+
+      if (runwayNode.Vehicles.Any())
+        return (new { allowed = false, error = "ВПП занята", retryAfter = 5000 }, false);
+
+      runwayNode.Vehicles.Add(new Vehicle(guid, "plane", "reserved"));
+
+      return (new
+      {
+        allowed = true,
+        planeParking = parking[0]
+      }, true);
+    }
+  }
+
+  public (object, bool) ProcessLanding(string guid, string runway)
+  {
+    lock (_lock)
+    {
+      var runwayNode = Nodes.FirstOrDefault(n => n.Name == runway && n.Type == "runway");
+      if (runwayNode == null)
+        return (new { success = false, error = "ВПП не найдена" }, false);
+
+      var vehicle = runwayNode.Vehicles.FirstOrDefault(v => v.Guid == guid && v.VehicleType == "plane" && v.Status == "reserved");
+
+      if (vehicle == null)
+        return (new { success = false, error = "Не получено разрешение на посадку" }, false);
+
+      vehicle.Status = "waiting";
+
+      var s = int.TryParse(guid.Split('-')[1], out int id);
+
+      _rabbitMqService.PublishPlaneRenderAction(id);
+
+      return (new { success = true }, true);
+    }
+  }
+
+  public (bool Success, string? Error) ProcessTakeoff(string guid, string runway)
+  {
+    lock (_lock)
+    {
+      var runwayNode = Nodes.FirstOrDefault(n => n.Name == runway && n.Type == "runway");
+      if (runwayNode == null)
+        return (false, "ВПП не найдена");
+
+      var plane = runwayNode.Vehicles.FirstOrDefault(v => v.Guid == guid);
+      if (plane == null)
+        return (false, "Самолет не на ВПП");
+
+      runwayNode.Vehicles.Remove(plane);
+
+      var s = int.TryParse(guid.Split('-')[1], out int id);
+
+      _rabbitMqService.PublishPlaneRenderAction(id);
+
+      return (true, null);
+    }
+  }
+
+  private async Task SendToVisualizer(string guid, string from, string to)
+  {
+    try
+    {
+      _rabbitMqService.PublishMoveAction(guid, from, to);
+    }
+    catch (Exception ex)
+    {
+      Console.WriteLine($"Ошибка отправки в RabbitMQ: {ex.Message}");
+    }
   }
 
   public (bool Success, string? Error) InitVehicles(List<string> vehicles, List<string> nodes)
@@ -297,5 +388,31 @@ public class ControlService
 
     // Путь не найден
     return new List<string>();
+  }
+
+  public List<string> FindPathWithRender(string guid, string from, string to)
+  {
+    try
+    {
+      // Извлекаем префикс из GUID (например, "BUS" из "BUS-123")
+      var prefix = guid.Split('-')[0].ToUpper();
+
+      if (!_vehicleTypeMap.TryGetValue(prefix, out var model))
+        throw new ArgumentException($"Недопустимый формат GUID: {guid}");
+
+      var path = FindPath(from, to);
+
+      if (path.Count > 0 && path.Last() == to)
+      {
+        _rabbitMqService.PublishCarRenderAction(model, from, to);
+      }
+
+      return path;
+    }
+    catch (Exception ex)
+    {
+      System.Console.WriteLine(ex.Message);
+      return new List<string>();
+    }
   }
 }

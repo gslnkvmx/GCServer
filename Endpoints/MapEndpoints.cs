@@ -4,11 +4,12 @@ namespace GCServer.Endpoints
   {
     public static void MapMapEndpoints(this WebApplication app)
     {
-      app.MapGet("/v1/map/path", (string from, string to, ControlService service) =>
+      app.MapGet("/v1/map/path", (string guid, string from, string to, ControlService service, ConsoleLogger logger) =>
       {
-        System.Console.WriteLine("GOT path request: ", from, to);
+
         // Заглушка для алгоритма поиска пути
-        var path = service.FindPath(from, to);
+        var path = service.FindPathWithRender(guid, from, to);
+        logger.Log("PATH", $"из {from} в {to}", path.Any());
         return Results.Json(new { path });
       });
 

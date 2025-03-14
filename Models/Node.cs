@@ -18,6 +18,7 @@ public class Node : IMapPoint
     Type = SetNodeType(name);
     if (Type == "carGarage") capacity = 30;
     if (Type == "refuelStation") capacity = 5;
+    if (Type == "cateringService") capacity = 4;
     Capacity = capacity;
   }
 
@@ -33,7 +34,7 @@ public class Node : IMapPoint
       _ when name.StartsWith("BR") => "baggageRoom",
       _ when name.StartsWith("BW") => "baggageWarehouse",
       _ when name.StartsWith("CS") => "cateringService",
-      _ when name.StartsWith("EX") => "exit",
+      _ when name.StartsWith("XT") => "exit",
       _ when name.StartsWith("RS") => "refuelStation",
       _ when name.StartsWith("FS") => "followMeStation",
       _ when name.StartsWith("CG") => "carGarage",

@@ -5,48 +5,48 @@ namespace GCServer.Endpoints
   {
     public static void MapVehicleEndpoints(this WebApplication app)
     {
-      app.MapPost("/v1/vehicles/init", (InitRequest request, ControlService service) =>
+      app.MapPost("/v1/vehicles/init", (InitRequest request, ControlService service, ConsoleLogger logger) =>
           {
             var (success, error) = service.InitVehicles(request.Vehicles, request.Nodes);
+
+            logger.Log("init", error, success);
 
             return success
                 ? Results.Ok()
                 : Results.BadRequest(new { error });
           });
 
-      app.MapGet("/v1/vehicles/move_permission", (string guid, string from, string to, ControlService service) =>
+      app.MapGet("/v1/vehicles/move_permission", (string guid, string from, string to, ControlService service, ConsoleLogger logger) =>
       {
-        System.Console.WriteLine("Ask permission: ", guid, from, to);
         var allowed = service.RequestMovePermission(guid, from, to);
+        logger.Log("RequestMovePermission", $"{guid} из {from} в {to}", allowed);
         return Results.Json(new { guid, from, to, allowed });
       });
 
-      app.MapPost("/v1/vehicles/move", (CarRequest request, ControlService service) =>
+      app.MapPost("/v1/vehicles/move", (CarRequest request, ControlService service, ConsoleLogger logger) =>
           {
-            System.Console.WriteLine("Ask move: ", request.Guid,
-                request.From,
-                request.To);
             var (success, error) = service.HandleMoveRequest(
                 request.Guid,
                 request.From,
                 request.To
             );
 
+            logger.Log("Move", error == null ? $"{request.Guid} из {request.From} в {request.To}" : error, success);
+
             return success
                 ? Results.Ok()
                 : Results.BadRequest(new { error });
           });
 
-      app.MapPost("/v1/vehicles/arrived", (CarRequest request, ControlService service) =>
+      app.MapPost("/v1/vehicles/arrived", (CarRequest request, ControlService service, ConsoleLogger logger) =>
       {
-        System.Console.WriteLine("Arrived: ", request.Guid,
-      request.From,
-      request.To);
         var (success, error) = service.HandleArrival(
                 request.Guid,
                 request.From,
                 request.To
             );
+
+        logger.Log("Arrived", error == null ? $"{request.Guid} из {request.From} в {request.To}" : error, success);
 
         return success
                 ? Results.Ok()
