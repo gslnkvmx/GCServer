@@ -20,6 +20,7 @@ public class Node : IMapPoint
     if (Type == "refuelStation") capacity = 5;
     if (Type == "cateringService") capacity = 4;
     if (Type == "planeParking") capacity = 2;
+    if (Type == "planeCrossroad") capacity = 2;
     Capacity = capacity;
   }
 

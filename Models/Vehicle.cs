@@ -26,6 +26,14 @@ public class Vehicle : IVehicle
   }
 
   [SetsRequiredMembers]
+  public Vehicle(Vehicle vehicle, string status)
+  {
+    Guid = vehicle.Guid;
+    VehicleType = vehicle.VehicleType;
+    Status = status;
+  }
+
+  [SetsRequiredMembers]
   public Vehicle(string guid, string vehicleType, string status)
   {
     Guid = guid;

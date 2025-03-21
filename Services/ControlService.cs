@@ -77,19 +77,29 @@ public class ControlService
     lock (_lock)
     {
       var moveToEdge = false;
+      var moveFromEdge = false;
       IMapPoint? fromPoint = null;
       IMapPoint? toPoint = null;
       if (from.StartsWith("E"))
       {
         fromPoint = Edges.FirstOrDefault(e => e.Name == from);
-        toPoint = Nodes.FirstOrDefault(e => e.Name == to);
+        moveFromEdge = true;
       }
       else
       {
         fromPoint = Nodes.FirstOrDefault(e => e.Name == from);
+      }
+
+      if (to.StartsWith("E"))
+      {
         toPoint = Edges.FirstOrDefault(e => e.Name == to);
         moveToEdge = true;
       }
+      else
+      {
+        toPoint = Nodes.FirstOrDefault(e => e.Name == to);
+      }
+
 
       if (fromPoint == null || toPoint == null) return false;
 
@@ -114,7 +124,8 @@ public class ControlService
         return true;
       }
 
-      toPoint.Vehicles.Add(new Vehicle((VehicleOnEdge)vehicle, "reserved"));
+      if (moveFromEdge) toPoint.Vehicles.Add(new Vehicle((VehicleOnEdge)vehicle, "reserved"));
+      else toPoint.Vehicles.Add(new Vehicle((Vehicle)vehicle, "reserved"));
       return true;
     }
   }
@@ -128,12 +139,19 @@ public class ControlService
       if (from.StartsWith("E"))
       {
         fromPoint = Edges.FirstOrDefault(e => e.Name == from);
-        toPoint = Nodes.FirstOrDefault(e => e.Name == to);
       }
       else
       {
         fromPoint = Nodes.FirstOrDefault(e => e.Name == from);
+      }
+
+      if (to.StartsWith("E"))
+      {
         toPoint = Edges.FirstOrDefault(e => e.Name == to);
+      }
+      else
+      {
+        toPoint = Nodes.FirstOrDefault(e => e.Name == to);
       }
 
       if (fromPoint == null) return (false, $"Не существует такой точки: {from}");
@@ -169,13 +187,21 @@ public class ControlService
       if (from.StartsWith("E"))
       {
         fromPoint = Edges.FirstOrDefault(e => e.Name == from);
-        toPoint = Nodes.FirstOrDefault(e => e.Name == to);
       }
       else
       {
         fromPoint = Nodes.FirstOrDefault(e => e.Name == from);
+      }
+
+      if (to.StartsWith("E"))
+      {
         toPoint = Edges.FirstOrDefault(e => e.Name == to);
       }
+      else
+      {
+        toPoint = Nodes.FirstOrDefault(e => e.Name == to);
+      }
+
 
       if (fromPoint == null) return (false, $"Не существует такой точки: {from}");
       if (toPoint == null) return (false, $"Не существует такой точки: {to}");
