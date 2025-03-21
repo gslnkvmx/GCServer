@@ -52,9 +52,29 @@ namespace GCServer.Endpoints
                 ? Results.Ok()
                 : Results.BadRequest(new { error });
       });
+
+      app.MapDelete("/v1/vehicles/clear", (string VehicleType, ControlService service, ConsoleLogger logger) =>
+        {
+          try
+          {
+            var count = service.ClearVehiclesByType(VehicleType);
+            logger.Log("Clear", $"Удалено {count} единиц техники типа {VehicleType}", true);
+            return Results.Json(new
+            {
+              success = true,
+              message = $"Удалено {count} единиц техники"
+            });
+          }
+          catch (Exception ex)
+          {
+            logger.Log("ClearError", ex.Message, false);
+            return Results.BadRequest(new { error = ex.Message });
+          }
+        });
     }
   }
 
+  public record ClearRequest(string VehicleType);
   public record InitRequest(List<string> Vehicles, List<string> Nodes);
   public record CarRequest(string Guid, string VehicleType, string From, string To);
 }

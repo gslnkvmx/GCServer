@@ -7,8 +7,8 @@ public class RabbitMqService : IDisposable
   private readonly IConnection _connection;
   private readonly IModel _channel;
   private const string QueueName = "render.action";
-  private const string CarQueue = "render.car";
-  private const string PlaneQueue = "render.plane";
+  private const string MoveQueue = "render.move";
+  private const string InitQueue = "render.init";
 
   public RabbitMqService(string hostname)
   {
@@ -17,19 +17,19 @@ public class RabbitMqService : IDisposable
     _connection = factory.CreateConnection();
     _channel = _connection.CreateModel();
 
-    _channel.QueueDelete(CarQueue, ifUnused: false, ifEmpty: false);
+    _channel.QueueDelete(MoveQueue, ifUnused: false, ifEmpty: false);
 
     _channel.QueueDeclare(
-        queue: CarQueue,
+        queue: MoveQueue,
         durable: false,
         exclusive: false,
         autoDelete: false,
         arguments: null);
 
-    _channel.QueueDelete(PlaneQueue, ifUnused: false, ifEmpty: false);
+    _channel.QueueDelete(InitQueue, ifUnused: false, ifEmpty: false);
 
     _channel.QueueDeclare(
-        queue: PlaneQueue,
+        queue: InitQueue,
         durable: false,
         exclusive: false,
         autoDelete: false,
@@ -45,44 +45,38 @@ public class RabbitMqService : IDisposable
         arguments: null);
   }
 
-  public void PublishCarRenderAction(string model, string start, string end)
+  public void PublishMoveRenderAction(string guid, string start, string end)
   {
-    var message = $"/car {model} {start} {end}";
+    var message = $"/move {guid} {start} {end}";
     var body = Encoding.UTF8.GetBytes(message);
 
     _channel.BasicPublish(
         exchange: "",
-        routingKey: "render.car",
+        routingKey: "render.move",
         basicProperties: null,
         body: body);
   }
 
-  public void PublishPlaneRenderAction(int id)
+  public void PublishInitRenderAction(string guid, string node)
   {
-    var message = $"/plane {id}";
+    var message = $"/init {guid} {node}";
     var body = Encoding.UTF8.GetBytes(message);
 
     _channel.BasicPublish(
         exchange: "",
-        routingKey: "render.plane",
+        routingKey: "render.init",
         basicProperties: null,
         body: body);
   }
 
-  public void PublishMoveAction(string guid, string from, string to)
+  public void PublishClearRenderAction(string type)
   {
-    var message = new
-    {
-      guid,
-      from,
-      to
-    };
-
-    var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message));
+    var message = $"/clear {type}";
+    var body = Encoding.UTF8.GetBytes(message);
 
     _channel.BasicPublish(
         exchange: "",
-        routingKey: QueueName,
+        routingKey: "render.init",
         basicProperties: null,
         body: body);
   }

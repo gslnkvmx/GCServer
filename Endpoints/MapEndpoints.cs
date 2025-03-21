@@ -8,7 +8,7 @@ namespace GCServer.Endpoints
       {
 
         // Заглушка для алгоритма поиска пути
-        var path = service.FindPathWithRender(guid, from, to);
+        var path = service.FindPath(from, to);
         logger.Log("PATH", $"из {from} в {to}", path.Any());
         return Results.Json(new { path });
       });

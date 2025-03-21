@@ -6,9 +6,17 @@ public static class PlaneEndpoints
         (string guid, string runway, ControlService service, ConsoleLogger logger) =>
     {
       var (result, allowed) = service.GetLandPermission(guid, runway);
-      logger.Log("GetLandPermission", $"Разрешение на приземление {guid} на {runway}", allowed);
+      logger.Log("GetLandPermission", $"Приземление {guid} на {runway}", allowed);
       return Results.Json(result);
     });
+
+    app.MapGet("/v1/vehicles/planes/takeoff_permission",
+    (string guid, string runway, ControlService service, ConsoleLogger logger) =>
+{
+  var (result, allowed) = service.GetTakeoffPermission(guid, runway);
+  logger.Log("GetTakeoffPermission", $"Отправка {guid} с {runway}", allowed);
+  return Results.Json(result);
+});
 
     app.MapPost("/v1/vehicles/planes/land", (LandRequest request, ControlService service, ConsoleLogger logger) =>
     {

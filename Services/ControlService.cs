@@ -7,7 +7,7 @@ public class ControlService
 
   private readonly Dictionary<string, string> _vehicleTypeMap = new()
     {
-        {"P", "plane"},
+        {"PL", "plane"},
         {"BUS", "bus"},
         {"BG", "baggage_tractor"},
         {"CT", "catering_truck"},
@@ -215,7 +215,7 @@ public class ControlService
       return (new
       {
         allowed = true,
-        planeParking = parking[0]
+        planeParking = parking
       }, true);
     }
   }
@@ -235,11 +235,31 @@ public class ControlService
 
       vehicle.Status = "waiting";
 
-      var s = int.TryParse(guid.Split('-')[1], out int id);
+      _rabbitMqService.PublishInitRenderAction(guid, "RW-0");
 
-      _rabbitMqService.PublishPlaneRenderAction(id);
+      _rabbitMqService.PublishMoveRenderAction(guid, "RW-0", runway);
 
       return (new { success = true }, true);
+    }
+  }
+
+  public (object, bool) GetTakeoffPermission(string guid, string runway)
+  {
+    lock (_lock)
+    {
+      var runwayNode = Nodes.FirstOrDefault(n => n.Name == runway && n.Type == "runway");
+      if (runwayNode == null)
+        return (new { allowed = false, error = "ВПП не найдена", retryAfter = 3000 }, false);
+
+      if (runwayNode.Vehicles.Any())
+        return (new { allowed = false, error = "ВПП занята", retryAfter = 5000 }, false);
+
+      runwayNode.Vehicles.Add(new Vehicle(guid, "plane", "reserved"));
+
+      return (new
+      {
+        allowed = true
+      }, true);
     }
   }
 
@@ -259,7 +279,7 @@ public class ControlService
 
       var s = int.TryParse(guid.Split('-')[1], out int id);
 
-      _rabbitMqService.PublishPlaneRenderAction(id);
+      _rabbitMqService.PublishMoveRenderAction(guid, runway, "RW-0");
 
       return (true, null);
     }
@@ -269,7 +289,7 @@ public class ControlService
   {
     try
     {
-      _rabbitMqService.PublishMoveAction(guid, from, to);
+      _rabbitMqService.PublishMoveRenderAction(guid, from, to);
     }
     catch (Exception ex)
     {
@@ -314,9 +334,36 @@ public class ControlService
           "waiting"
         ));
 
+        _rabbitMqService.PublishInitRenderAction(guid, nodeName);
+
         Console.WriteLine($"Инициализировано транспортное средство {guid} на узле {nodeName}");
       }
       return (true, null);
+    }
+  }
+
+  public int ClearVehiclesByType(string vehicleType)
+  {
+    lock (_lock)
+    {
+      var count = 0;
+
+      // Удаление из узлов
+      foreach (var node in Nodes)
+      {
+        count += node.Vehicles.RemoveAll(v => v.Guid.StartsWith(vehicleType));
+      }
+
+      // Удаление из ребер
+      foreach (var edge in Edges)
+      {
+        count += edge.Vehicles.RemoveAll(v => v.Guid.StartsWith(vehicleType));
+        count += edge.Vehicles.RemoveAll(v => v.Guid.StartsWith(vehicleType));
+      }
+
+      _rabbitMqService.PublishClearRenderAction(vehicleType);
+
+      return count;
     }
   }
 
@@ -388,31 +435,5 @@ public class ControlService
 
     // Путь не найден
     return new List<string>();
-  }
-
-  public List<string> FindPathWithRender(string guid, string from, string to)
-  {
-    try
-    {
-      // Извлекаем префикс из GUID (например, "BUS" из "BUS-123")
-      var prefix = guid.Split('-')[0].ToUpper();
-
-      if (!_vehicleTypeMap.TryGetValue(prefix, out var model))
-        throw new ArgumentException($"Недопустимый формат GUID: {guid}");
-
-      var path = FindPath(from, to);
-
-      if (path.Count > 0 && path.Last() == to)
-      {
-        _rabbitMqService.PublishCarRenderAction(model, from, to);
-      }
-
-      return path;
-    }
-    catch (Exception ex)
-    {
-      System.Console.WriteLine(ex.Message);
-      return new List<string>();
-    }
   }
 }
